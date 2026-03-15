@@ -10,6 +10,7 @@ repository = "https://github.com/Rottenham/pvz-interception-calculator-rust"
 
 [dependencies]
 dyn-fmt = "0.4.0"
+evalexpr = "13.1.0"
 rustyline = "12.0.0"
 termcolor = "1.2"
 csv = "1.1.6"

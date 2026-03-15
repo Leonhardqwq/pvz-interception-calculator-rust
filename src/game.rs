@@ -700,7 +700,7 @@ fn judge_internal(
         },
         velocity: Vec2 {
             x: -3.,
-            y: imp_velocity_y / 3. * 0.5 * 0.05000000074505806,
+            y: imp_velocity_y / 3. * 0.5 * 0.05,
         },
         exist_time: 0,
         chill_cd: iced - imp_spawn_time,

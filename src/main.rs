@@ -40,7 +40,7 @@ fn main() -> rustyline::Result<()> {
                 if let ParseResult::Matched = parser.parse_help(input.as_str()) {
                     continue;
                 }
-                println!("{UNKNOWN_COMMAND}");
+                parser.eval_expr(input.as_str());
             }
             Err(rustyline::error::ReadlineError::Interrupted)
             | Err(rustyline::error::ReadlineError::Eof) => {
