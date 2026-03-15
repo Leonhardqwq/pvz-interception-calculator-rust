@@ -31,7 +31,7 @@ fn validate_garg_x_range(min_max_garg_x: &mut (f32, f32)) -> Result<game::GargXR
 struct ParsedGargPos {
     garg_rows: Vec<i32>,
     min_max_garg_x: Option<(f32, f32)>,
-    ice_flag: Option<bool>,
+    ice_flag: Option<i32>,
 }
 
 pub struct Parser {
@@ -742,6 +742,8 @@ impl Parser {
                         );
                         return ParseResult::Matched;
                     };
+                    let min_garg_x = (min_garg_x * 1000.0).floor() / 1000.0;
+                    let max_garg_x = (max_garg_x * 1000.0).floor() / 1000.0;
                     println!("{GARG_X_RANGE}: {:.3}~{:.3}", min_garg_x, max_garg_x);
                     ParseResult::Matched
                 }
@@ -1060,11 +1062,11 @@ impl Parser {
         }
     }
 
-    fn parse_ice_flag(ice_mode: &&str) -> Result<bool, ()> {
+    fn parse_ice_flag(ice_mode: &&str) -> Result<i32, ()> {
         if *ice_mode == "u" {
-            Ok(false)
+            Ok(0)
         } else if *ice_mode == "i" {
-            Ok(true)
+            Ok(100000)
         } else {
             printer::print_error_with_input(ICE_FLAG_SHOULD_BE_U_OR_I, ice_mode);
             Err(())
