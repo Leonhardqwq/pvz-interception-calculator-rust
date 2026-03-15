@@ -1,5 +1,4 @@
 use crate::constants;
-use dyn_fmt::AsStrFormatExt;
 use std::{cmp, ops::Add};
 
 #[cfg(feature = "en")]
@@ -18,14 +17,8 @@ const GARG_THROW_IMP_THRES: f32 = 400.;
 const IMP_DEFENSE_SHIFT: IntVec2 = IntVec2 { x: 36, y: 0 };
 const IMP_DEFENSE_WIDTH: i32 = 42;
 const IMP_DEFENSE_HEIGHT: i32 = 115;
-const MIN_GARG_START_POS: f32 = 845.;
-const MAX_GARG_START_POS: f32 = 854.;
 pub const MIN_GARG_X: f32 = -152.; // 如果 x <= -152., 巨人将进家
-pub const MAX_GARG_X: f32 = MAX_GARG_START_POS;
-const MIN_ICE_TIME_FOR_UNICED: i32 = 400;
-const MAX_ICE_TIME_FOR_UNICED: i32 = 600;
-const MIN_ICE_TIME_FOR_ICED: i32 = 300;
-const MAX_ICE_TIME_FOR_ICED: i32 = 400;
+pub const MAX_GARG_X: f32 = 854.;
 pub const ICE_SLOW_TOTAL_TIME: i32 = 2000;
 const DE_COB_DIST: CobDist = CobDist {
     hit_above: 111,
@@ -747,7 +740,7 @@ fn judge_internal(
             }
             ImpState::S0 => {
                 if iceable.is_none() {
-                    iceable = Some(tick - 1);
+                    iceable = Some(tick);
                 }
                 if eat.is_none() && imp.exist_time % eat_loop == 0 {
                     eat = Some(tick);
@@ -782,7 +775,7 @@ impl IceAndCobTimes {
         }
         let mut ice_times = ice_times
             .iter()
-            .filter(|&&v| v >= 0 && v <= cob_time)
+            .filter(|&&v| v > 0 && v <= cob_time)
             .cloned()
             .collect::<Vec<i32>>();
         ice_times.sort();
@@ -795,7 +788,7 @@ impl IceAndCobTimes {
     pub fn is_iced(&self) -> i32 {
         match (self.ice_times.last(), self.cob_time) {
             (None, _) => 0,
-            (Some(last_ice_time), cob_time) => ICE_SLOW_TOTAL_TIME - cob_time + last_ice_time,
+            (Some(last_ice_time), cob_time) => ICE_SLOW_TOTAL_TIME - cob_time + last_ice_time - 1,
         }
     }
 }
@@ -806,122 +799,8 @@ pub fn min_max_garg_x(
         cob_time,
     }: &IceAndCobTimes,
 ) -> Result<(f32, f32), String> {
-    let (min_half_ticks, max_half_ticks) = min_max_garg_walk_in_half_ticks(ice_times, *cob_time);
-    match (
-        constants::garg_slow_of_half_ticks(min_half_ticks),
-        constants::garg_fast_of_half_ticks(max_half_ticks),
-    ) {
-        (None, _) => Err(GARG_MIN_WALK_OUT_OF_RANGE.format(&[
-            (min_half_ticks as f32 / 2.).to_string(),
-            0.to_string(),
-            (constants::GARG_DATA_SIZE - 1).to_string(),
-        ])),
-        (_, None) => Err(GARG_MAX_WALK_OUT_OF_RANGE.format(&[
-            (max_half_ticks as f32 / 2.).to_string(),
-            0.to_string(),
-            (constants::GARG_DATA_SIZE - 1).to_string(),
-        ])),
-        (Some(min_walk), Some(max_walk)) => {
-            Ok((MIN_GARG_START_POS - max_walk, MAX_GARG_START_POS - min_walk))
-        }
-    }
-}
-
-fn min_max_garg_walk_in_half_ticks(valid_ice_times: &[i32], cob_time: i32) -> (i32, i32) {
-    (
-        garg_walk_in_half_ticks(
-            valid_ice_times,
-            cob_time,
-            MAX_ICE_TIME_FOR_ICED,
-            MAX_ICE_TIME_FOR_UNICED,
-        ),
-        garg_walk_in_half_ticks(
-            valid_ice_times,
-            cob_time,
-            MIN_ICE_TIME_FOR_ICED,
-            MIN_ICE_TIME_FOR_UNICED,
-        ),
-    )
-}
-
-fn garg_walk_in_half_ticks(
-    valid_ice_times: &[i32],
-    cob_time: i32,
-    ice_length_for_iced: i32,
-    ice_length_for_uniced: i32,
-) -> i32 {
-    enum Tick {
-        Start(i32),
-        Ice { time: i32, length: i32 },
-        Cob(i32),
-    }
-
-    impl Tick {
-        // 返回值单位为 0.5cs
-        fn diff_in_half_ticks(old_tick: &Tick, new_tick: &Tick) -> i32 {
-            let prorated_walk = |walk: i32, ice_length| {
-                let uniced_walk = cmp::max(walk - (ICE_SLOW_TOTAL_TIME - ice_length), 0);
-                (walk - uniced_walk) + uniced_walk * 2
-            };
-            match (new_tick, old_tick) {
-                (Tick::Start(_), _) => panic!("Tick::Start can only be minuend."),
-                (Tick::Ice { time: _, length: _ }, Tick::Cob(_)) => {
-                    panic!("Tick::Cob must be later than Tick::Ice.")
-                }
-                (Tick::Cob(_), Tick::Cob(_)) => panic!("Tick::Cob must be unique."),
-                (
-                    Tick::Ice {
-                        time: new_time,
-                        length: _,
-                    },
-                    Tick::Start(old_time),
-                ) => cmp::max((new_time - old_time - 1) * 2, 0),
-                (
-                    Tick::Ice {
-                        time: new_time,
-                        length: _,
-                    },
-                    Tick::Ice {
-                        time: old_time,
-                        length,
-                    },
-                ) => prorated_walk(cmp::max(new_time - old_time - (length - 1), 0), length),
-                (Tick::Cob(new_time), Tick::Start(old_time)) => {
-                    cmp::max((new_time - old_time) * 2, 0)
-                }
-                (
-                    Tick::Cob(new_time),
-                    Tick::Ice {
-                        time: old_time,
-                        length,
-                    },
-                ) => prorated_walk(cmp::max(new_time - old_time - (length - 2), 0), length),
-            }
-        }
-    }
-
-    let mut ticks: Vec<Tick> = vec![Tick::Start(0)];
-    let mut prev_ice_time = None;
-    for &ice_time in valid_ice_times {
-        let iced: bool = match prev_ice_time {
-            None => false,
-            Some(prev_ice_time) => ice_time - prev_ice_time < ICE_SLOW_TOTAL_TIME,
-        };
-        ticks.push(Tick::Ice {
-            time: ice_time + 1,
-            length: if iced {
-                ice_length_for_iced
-            } else {
-                ice_length_for_uniced
-            },
-        });
-        prev_ice_time = Some(ice_time + 1);
-    }
-    ticks.push(Tick::Cob(cob_time));
-    ticks
-        .windows(2)
-        .map(|pair| Tick::diff_in_half_ticks(&pair[0], &pair[1]))
-        .sum::<i32>()
+    let (min_x, max_x) = crate::zmc::min_max_garg_x_from_zmc(ice_times, *cob_time);
+    Ok((min_x, max_x))
 }
 
 pub fn hit_col_matching_int_pixel(unvalidated_hit_col: f32) -> Option<f32> {
