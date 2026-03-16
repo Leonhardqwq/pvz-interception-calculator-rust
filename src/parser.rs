@@ -760,54 +760,127 @@ impl Parser {
         }
     }
 
-    pub fn parse_garg_x_range_of_imp_x(&mut self, input: &str) -> ParseResult {
+    pub fn parse_imp(&mut self, input: &str) -> ParseResult {
         match input.split_whitespace().collect::<Vec<&str>>().as_slice() {
             ["imp", extra_args @ ..] => match extra_args {
                 [] => {
+                    printer::print_error(NEED_GARG_X_OR_IMP_X);
+                    ParseResult::Matched
+                }
+                ["garg"] => {
                     printer::print_error(NEED_IMP_X_RANGE);
                     ParseResult::Matched
                 }
-                [imp_x] => {
-                    let imp_x = match eval_as_i32(imp_x, &mut self.eval_context) {
+                ["garg", imp_x] => {
+                    let is_roof = self.scene.is_roof();
+                    let (min_valid_imp_x, max_valid_imp_x) = constants::imp_x_bounds(is_roof);
+                    let floor_3 = |v: f32| (v * 1000.0).floor() / 1000.0;
+                    match imp_x.replace('，', ",").split(',').collect::<Vec<&str>>().as_slice() {
+                        [single_imp_x] => {
+                            let imp_x = match eval_as_i32(single_imp_x, &mut self.eval_context) {
+                                Ok(v) => v,
+                                Err(EvalError::Eval(e)) => {
+                                    printer::print_error(&e);
+                                    return ParseResult::Matched;
+                                }
+                                Err(EvalError::Type(v)) => {
+                                    printer::print_error_with_input(IMP_X_SHOULD_BE_INTEGER, &v);
+                                    return ParseResult::Matched;
+                                }
+                            };
+                            let Some((min_garg_x, max_garg_x)) =
+                                constants::min_max_garg_pos_of_imp_x_by_scene(imp_x, is_roof)
+                            else {
+                                printer::print_error_with_input(
+                                    &IMP_X_SHOULD_BE_IN_RANGE
+                                        .format(&[min_valid_imp_x, max_valid_imp_x]),
+                                    imp_x.to_string().as_str(),
+                                );
+                                return ParseResult::Matched;
+                            };
+                            println!("{GARG_X_RANGE}: {:.3}~{:.3}", floor_3(min_garg_x), floor_3(max_garg_x));
+                        }
+                        [min_imp_x, max_imp_x] => {
+                            let min_imp_x = match eval_as_i32(min_imp_x, &mut self.eval_context) {
+                                Ok(v) => v,
+                                Err(EvalError::Eval(e)) => {
+                                    printer::print_error(&e);
+                                    return ParseResult::Matched;
+                                }
+                                Err(EvalError::Type(v)) => {
+                                    printer::print_error_with_input(IMP_X_SHOULD_BE_INTEGER, &v);
+                                    return ParseResult::Matched;
+                                }
+                            };
+                            let max_imp_x = match eval_as_i32(max_imp_x, &mut self.eval_context) {
+                                Ok(v) => v,
+                                Err(EvalError::Eval(e)) => {
+                                    printer::print_error(&e);
+                                    return ParseResult::Matched;
+                                }
+                                Err(EvalError::Type(v)) => {
+                                    printer::print_error_with_input(IMP_X_SHOULD_BE_INTEGER, &v);
+                                    return ParseResult::Matched;
+                                }
+                            };
+                            let (min_imp_x, max_imp_x) = if min_imp_x <= max_imp_x {
+                                (min_imp_x, max_imp_x)
+                            } else {
+                                (max_imp_x, min_imp_x)
+                            };
+                            let clamped_min_imp_x = min_imp_x.max(min_valid_imp_x);
+                            let clamped_max_imp_x = max_imp_x.min(max_valid_imp_x);
+                            if clamped_min_imp_x > clamped_max_imp_x {
+                                printer::print_error_with_input(
+                                    &IMP_X_SHOULD_BE_IN_RANGE
+                                        .format(&[min_valid_imp_x, max_valid_imp_x]),
+                                    imp_x,
+                                );
+                                return ParseResult::Matched;
+                            }
+                            let Some((range_min, range_max)) = constants::union_min_max_garg_pos_of_imp_x_range(
+                                clamped_min_imp_x,
+                                clamped_max_imp_x,
+                                is_roof,
+                            ) else {
+                                printer::print_error_with_input(
+                                    &IMP_X_SHOULD_BE_IN_RANGE
+                                        .format(&[min_valid_imp_x, max_valid_imp_x]),
+                                    imp_x,
+                                );
+                                return ParseResult::Matched;
+                            };
+                            println!("{GARG_X_RANGE}: {:.3}~{:.3}", floor_3(range_min), floor_3(range_max));
+                        }
+                        _ => {
+                            printer::print_too_many_arguments_error();
+                            return ParseResult::Matched;
+                        }
+                    }
+                    ParseResult::Matched
+                }
+                [garg_x] => {
+                    let garg_x_value = match eval_as_f32(garg_x, &mut self.eval_context) {
                         Ok(v) => v,
                         Err(EvalError::Eval(e)) => {
                             printer::print_error(&e);
                             return ParseResult::Matched;
                         }
                         Err(EvalError::Type(v)) => {
-                            printer::print_error_with_input(IMP_X_SHOULD_BE_INTEGER, &v);
+                            printer::print_error_with_input(GARG_X_SHOULD_BE_NUMBER, &v);
                             return ParseResult::Matched;
                         }
                     };
-                    if self.scene.is_roof() {
-                        let Some((min_garg_x, max_garg_x)) =
-                            constants::min_max_garg_pos_of_imp_x_of_roof(imp_x)
-                        else {
-                            printer::print_error_with_input(
-                                &IMP_X_SHOULD_BE_IN_RANGE
-                                    .format(&[constants::MIN_IMP_X_OF_ROOF, constants::MAX_IMP_X_OF_ROOF]),
-                                imp_x.to_string().as_str(),
-                            );
-                            return ParseResult::Matched;
-                        };
-                        let min_garg_x = (min_garg_x * 1000.0).floor() / 1000.0;
-                        let max_garg_x = (max_garg_x * 1000.0).floor() / 1000.0;
-                        println!("{GARG_X_RANGE}: {:.3}~{:.3}", min_garg_x, max_garg_x);
-                    } else {
-                        let Some((min_garg_x, max_garg_x)) =
-                            constants::min_max_garg_pos_of_imp_x(imp_x)
-                        else {
-                            printer::print_error_with_input(
-                                &IMP_X_SHOULD_BE_IN_RANGE
-                                    .format(&[constants::MIN_IMP_X, constants::MAX_IMP_X]),
-                                imp_x.to_string().as_str(),
-                            );
-                            return ParseResult::Matched;
-                        };
-                        let min_garg_x = (min_garg_x * 1000.0).floor() / 1000.0;
-                        let max_garg_x = (max_garg_x * 1000.0).floor() / 1000.0;
-                        println!("{GARG_X_RANGE}: {:.3}~{:.3}", min_garg_x, max_garg_x);
+                    if garg_x_value <= 400.0 {
+                        printer::print_error_with_input(
+                            &MIN_GARG_X_SHOULD_BE_LARGER_THAN_LOWER_BOUND.format(&[400]),
+                            garg_x,
+                        );
+                        return ParseResult::Matched;
                     }
+                    let imp_x_rnd_0 = game::get_imp_x(garg_x_value, 0.0, &self.scene);
+                    let imp_x_rnd_100 = game::get_imp_x(garg_x_value, 100.0, &self.scene);
+                    println!("{IMP_X_RANGE}: {:.3}~{:.3}", imp_x_rnd_0, imp_x_rnd_100);
                     ParseResult::Matched
                 }
                 _ => {

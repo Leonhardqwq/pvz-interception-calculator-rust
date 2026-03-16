@@ -510,7 +510,7 @@ impl Eat {
             Eat::Empty => {}
             Eat::Some { eat, iceable } => {
                 *self = Eat::Some {
-                    eat: *eat + 1,
+                    eat: *eat,
                     iceable: *iceable,
                 }
             }
@@ -672,14 +672,15 @@ fn judge_internal(
         return (Eat::Empty, Intercept::Empty);
     }
     let mut imp_velocity_y = garg_pos.x - 360. - (if scene.is_roof() { 180. } else { 0. });
-    if imp_velocity_y >= 40. {
+    let lowerbound = if scene.is_roof() { -140. } else { 40. };
+    if imp_velocity_y >= lowerbound {
         if imp_velocity_y > 140. {
             imp_velocity_y -= rnd as f32;
         } else if rnd != 0.0 {
             return (Eat::Empty, Intercept::Empty);
         }
     } else {
-        imp_velocity_y = 40.;
+        imp_velocity_y = lowerbound;
     }
     let imp_spawn_time = constants::IMP_SPAWN_TIME_OF_SLOW_CD_AT_COB_TIME[cmp::max(0, cmp::min(210, iced)) as usize];
     let y_shift = |x: f32, roof: bool| {
@@ -695,7 +696,7 @@ fn judge_internal(
             x: garg_pos.x - 133.,
             y: garg_pos.y,
             h: 88.,
-            y_shift: y_shift(garg_pos.x - 133., scene.is_roof()),
+            y_shift: y_shift(garg_pos.x, scene.is_roof()),
             row: garg_row,
         },
         velocity: Vec2 {
@@ -832,70 +833,54 @@ pub fn safe_intercept_interval(eat: &Eat, intercept: &Intercept) -> Option<(i32,
     }
 }
 
-// fn get_imp_x(garg_pos: &Vec2, garg_row: i32, rnd: i32, iced: bool, roof: bool) -> f32 {
-//     if garg_pos.x <= GARG_THROW_IMP_THRES {
-//         return 0.;
-//     }
-//     let mut imp_velocity_y = garg_pos.x - 360. - (if roof { 180. } else { 0. });
-//     if imp_velocity_y >= 40. {
-//         if imp_velocity_y > 140. {
-//             imp_velocity_y -= rnd as f32;
-//         } else if rnd != 0 {
-//             return 0.;
-//         }
-//     } else {
-//         imp_velocity_y = 40.;
-//     }
-//     let imp_spawn_time = if iced { 210 } else { 105 };
-//     let shifted_y_of_y = |x: f32, roof: bool| {
-//         if !roof || x >= 400. {
-//             0.
-//         } else {
-//             (400. - x) / 4.
-//         }
-//     };
-//     let mut imp = Imp {
-//         state: ImpState::S71,
-//         position: Position {
-//             x: garg_pos.x - 133.,
-//             y: garg_pos.y,
-//             h: 88.,
-//             y_shift: shifted_y_of_y(garg_pos.x - 133., roof),
-//             row: garg_row,
-//         },
-//         velocity: Vec2 {
-//             x: -3.,
-//             y: imp_velocity_y / 3. * 0.5 * 0.05000000074505806,
-//         },
-//         exist_time: 0,
-//     };
-//     for _ in (imp_spawn_time + 1).. {
-//         imp.exist_time += 1;
-//         match imp.state {
-//             ImpState::S71 => {
-//                 imp.velocity = imp.velocity + GRAVITY;
-//                 imp.position.x += imp.velocity.x;
-//                 imp.position.h += imp.velocity.y;
-//                 imp.position.y_shift = shifted_y_of_y(imp.position.x, roof);
-//                 if imp.position.y_shift + imp.position.h < 0. {
-//                     return imp.position.x;
-//                 }
-//             }
-//             ImpState::S72 { countdown } => {
-//                 imp.state = ImpState::S72 {
-//                     countdown: (countdown - 1),
-//                 };
-//                 if countdown - 1 == 0 {
-//                     imp.state = ImpState::S0;
-//                 }
-//             }
-//             ImpState::S0 => {
-//                 break;
-//             }
-//         }
-//     }
-//     0.
-// }
+pub fn get_imp_x(garg_x: f32, rnd: f32, scene: &Scene) -> f32 {
+    if garg_x <= GARG_THROW_IMP_THRES {
+        return 0.;
+    }
+    let mut imp_velocity_y = garg_x - 360. - (if scene.is_roof() { 180. } else { 0. });
+    let lowerbound = if scene.is_roof() { -140. } else { 40. };
+    if imp_velocity_y >= lowerbound {
+        if imp_velocity_y > 140. {
+            imp_velocity_y -= rnd as f32;
+        }
+    } else {
+        imp_velocity_y = lowerbound;
+    }
+    let y_shift = |x: f32, roof: bool| {
+        if !roof || x >= 400. {
+            0.
+        } else {
+            (400. - x) / 4.
+        }
+    };
+    let garg_row = 2;
+    let mut imp = Imp {
+        state: ImpState::S71,
+        position: Position {
+            x: garg_x - 133.,
+            y: (scene.zombie_base_y() + (garg_row - 1) * scene.row_height()) as f32,
+            h: 88.,
+            y_shift: y_shift(garg_x, scene.is_roof()),
+            row: garg_row,
+        },
+        velocity: Vec2 {
+            x: -3.,
+            y: imp_velocity_y / 3. * 0.5 * 0.05,
+        },
+        exist_time: 0,
+        chill_cd: 0,
+    };
+    loop {
+        imp.velocity = imp.velocity + GRAVITY;
+        imp.position.x += imp.velocity.x;
+        let new_y_shift = y_shift(imp.position.x, scene.is_roof());
+        imp.position.h += imp.velocity.y + (new_y_shift - imp.position.y_shift);
+        imp.position.y_shift = new_y_shift;
+        if imp.position.h <= 0. {
+            return imp.position.x;
+        }
+    }
+}
 
 /*
 #[cfg(test)]

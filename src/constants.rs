@@ -31,16 +31,40 @@ pub const IMP_S72_TIME_OF_SLOW_CD_AT_BIRTH: [i32; 52] = [
     50, 51, 
 ];
 
-pub fn min_max_garg_pos_of_imp_x(imp_x: i32) -> Option<(f32, f32)> {
-    MIN_MAX_GARG_X_OF_IMP_POS
-        .get((imp_x - MIN_IMP_X) as usize)
-        .cloned()
+pub fn imp_x_bounds(is_roof: bool) -> (i32, i32) {
+    if is_roof { (MIN_IMP_X_OF_ROOF, MAX_IMP_X_OF_ROOF) } 
+    else { (MIN_IMP_X, MAX_IMP_X) }
 }
 
-pub fn min_max_garg_pos_of_imp_x_of_roof(imp_x: i32) -> Option<(f32, f32)> {
-    MIN_MAX_GARG_X_OF_IMP_POS_OF_ROOF
-        .get((imp_x - MIN_IMP_X_OF_ROOF) as usize)
-        .cloned()
+pub fn min_max_garg_pos_of_imp_x_by_scene(imp_x: i32, is_roof: bool) -> Option<(f32, f32)> {
+    let (min_imp_x, max_imp_x) = imp_x_bounds(is_roof);
+    if imp_x < min_imp_x || imp_x > max_imp_x {
+        return None;
+    }
+    if is_roof {
+        MIN_MAX_GARG_X_OF_IMP_POS_OF_ROOF
+            .get((imp_x - MIN_IMP_X_OF_ROOF) as usize)
+            .cloned()
+    } else {
+        MIN_MAX_GARG_X_OF_IMP_POS
+            .get((imp_x - MIN_IMP_X) as usize)
+            .cloned()
+    }
+}
+
+pub fn union_min_max_garg_pos_of_imp_x_range(min_imp_x: i32, max_imp_x: i32, is_roof: bool) -> Option<(f32, f32)> {
+    let mut min_garg_x = f32::INFINITY;
+    let mut max_garg_x = f32::NEG_INFINITY;
+    let mut found = false;
+    for imp_x in min_imp_x..=max_imp_x {
+        if let Some((curr_min, curr_max)) = min_max_garg_pos_of_imp_x_by_scene(imp_x, is_roof) {
+            if curr_min < min_garg_x { min_garg_x = curr_min; }
+            if curr_max > max_garg_x { max_garg_x = curr_max; }
+            found = true;
+        }
+    }
+    if found { Some((min_garg_x, max_garg_x)) }
+    else { None }
 }
 
 pub const MIN_IMP_X: i32 = 66; // MIN_MAX_GARG_X_OF_IMP_POS第一个值对应imp_pos=66，第二个对应67，依次类推
